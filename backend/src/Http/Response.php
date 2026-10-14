@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace DoubtQueue\Http;
 
+use JsonException;
+
 class Response
 {
     public function __construct(public readonly int $status, public readonly array $body)
@@ -17,8 +19,28 @@ class Response
 
     public function send(): void
     {
-        http_response_code($this->status);
+        $response = $this;
+
+        try {
+            $body = $response->encode();
+        } catch (JsonException $e) {
+            error_log((string) $e);
+
+            $response = self::error(500, 'Something went wrong');
+            $body = $response->encode();
+        }
+
+        http_response_code($response->status);
         header('Content-Type: application/json');
-        echo json_encode($this->body, JSON_UNESCAPED_SLASHES);
+        echo $body;
+    }
+
+    /**
+     * @throws JsonException when the body cannot be encoded, for example
+     *                       because a string in it is not valid UTF-8.
+     */
+    private function encode(): string
+    {
+        return json_encode($this->body, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     }
 }
